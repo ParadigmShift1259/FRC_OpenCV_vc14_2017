@@ -11,10 +11,10 @@
 *.userprefs
 
 # Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
+OpenCVTest/[Dd]ebug/
+OpenCVTest/[Dd]ebugPublic/
+OpenCVTest/[Rr]elease/
+OpenCVTest/[Rr]eleases/
 x64/
 x86/
 build/
