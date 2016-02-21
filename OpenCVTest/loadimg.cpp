@@ -3,11 +3,11 @@
 #include <algorithm>
 #include <vector>
 #include <iostream>
-
+#include <Windows.h>
+#include "resource2.h"
 
 using namespace cv;
 using namespace std;
-
 
 const string videoStreamAddress = "rtsp://FRC:frc@axis-camera.local:554/axis-media/media.amp?videocodec=h264";
 
@@ -24,103 +24,92 @@ const Scalar electricindigo = Scalar(255, 0, 128);
 const Scalar magenta = Scalar(255, 0, 255);
 const Scalar flushorange = Scalar(128, 0, 255);
 const Scalar white = Scalar(255, 255, 255);
-const Rect bounds = Rect(280, 180, 80, 40);
+
+const Rect bounds = Rect(275, 95, 90, 145);
 const Point2f center = (bounds.tl() + bounds.br())*0.5;
 
-void myContours(Mat src_gray, Mat image, shared_ptr<NetworkTable> netTable, int thresh = 100, int max_thresh = 255);
+
+void myContours(Mat src_gray, Mat image, int thresh = 100, int max_thresh = 255);
 
 
-bool rectCompare(Rect l, Rect r) {
-	//biggest area is closest
-	if (l.area() > r.area())
-		return true;
-	if (l.area() < r.area())
-		return false;
-	//nearest to the center of the bounds is closest
-	Point2f lcenter = ((l.tl() + l.br())*0.5);
-	Point2f rcenter = ((r.tl() + r.br())*0.5);
-	Point2f ldist = lcenter - center;
-	Point2f rdist = rcenter - center;
-	if (ldist.dot(ldist) < rdist.dot(rdist))
-		return true;
-	if (ldist.dot(ldist) > rdist.dot(rdist))
-		return false;
-	//lower down is closest
-	if (l.y > r.y)
-		return true;
-	if (l.y < r.y)
-		return false;
-	//closer to frame right (robot left) is closest
-	if (l.x > r.x)
-		return true;
-	return false;
-}
+bool rectCompare(Rect l, Rect r);
+
+
+Mat bmp2mat(LPCWSTR name);
 
 
 int main(int argc, char* argv[])
 {
+	
 	VideoCapture videostream;
-	Mat streamimage, inrangeimage;
+	Mat failimage, streamimage, inrangeimage;
+	failimage = bmp2mat(MAKEINTRESOURCE(IDB_BITMAP1));
 
 	NetworkTable::SetClientMode();
 	//NetworkTable::SetTeam(1259);
 	//NetworkTable::SetIPAddress("10.12.59.1");
 	NetworkTable::SetIPAddress("roboRIO-1259-FRC.local");
-	shared_ptr<NetworkTable> netTable = NetworkTable::GetTable("OpenCV");
-	namedWindow("Contours", CV_WINDOW_AUTOSIZE);
+	//namedWindow("Contours", CV_WINDOW_AUTOSIZE);
+	imshow("Contours", failimage);
 
 	//open the video stream and make sure it's opened
-	if (videostream.open(videoStreamAddress))
+	while (true)
 	{
-		while (true)
+		if (videostream.isOpened()||videostream.open(videoStreamAddress))
 		{
+//			cout << "while" << endl;
 			// read an image from the stream
 			if (videostream.read(streamimage))
 			{
 				//imshow("Output Window", image);
 				// filter the image
+//				cout << "inrange" << endl;
 				inRange(streamimage, Scalar(128, 128, 0), Scalar(255, 255, 54), inrangeimage);
-				myContours(inrangeimage, streamimage, netTable);
-//				namedWindow("Contours", CV_WINDOW_AUTOSIZE);
+//				cout << "afer inrange" << endl;
+				myContours(inrangeimage, streamimage);
+//				cout << "afer contours" << endl;
+				//	namedWindow("Contours", CV_WINDOW_AUTOSIZE);
 //				imshow("Contours", streamimage);
+//				cout << "waitkey" << endl;
 				if (waitKey(1) != -1)
 					break;
 			}
 			else
 			{
-				cout << "Error:  Unable to read frame from stream" << endl;
+				cerr << "Error:  Unable to read frame from stream" << endl;
+				if (waitKey(200) != -1)
+					break;
 			}
 		}
-	}
-	else
-	{
-		cout << "Error:  Unable to open video stream" << endl;
-		return 1;
+		else
+		{
+			cerr << "Error:  Unable to open video stream" << endl;
+			if (waitKey(200) != -1)
+				break;
+		}
 	}
 	return 0;
 }
 
 
-void myContours(Mat inrangeimage, Mat streamimage, shared_ptr<NetworkTable> netTable, int thresh, int max_thresh)
+void myContours(Mat inrangeimage, Mat streamimage, int thresh, int max_thresh)
 {
-	vector<vector<Point>> contours;
-	//vector<Point> hull;
-	//vector<Rect> rects;
+	shared_ptr<NetworkTable> netTable = NetworkTable::GetTable("OpenCV");
+	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 	vector<double> rectsprops[8];
 	bool(*compare) (Rect, Rect) = rectCompare;
 	map<Rect, RotatedRect, bool(*)(Rect, Rect)> rects2 (compare);
-	
+
 	for (size_t i = 0; i < 8; i++)
 		rectsprops[i] = vector<double>(0);
 
-	findContours(inrangeimage, contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
+	findContours(inrangeimage, contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE);
 
 	for (size_t i = 0; (i < contours.size()) && (rects2.size() < 8); i++)
 	{
 		if (hierarchy[i][3] < 0)
 		{
-			//convexHull(contours[i], hull);
 			RotatedRect a = minAreaRect(contours[i]);
 			if (a.size.area() > 300)
 			{
@@ -132,7 +121,6 @@ void myContours(Mat inrangeimage, Mat streamimage, shared_ptr<NetworkTable> netT
 	int j = 0;
 	for (map<Rect, RotatedRect, bool(*)(Rect, Rect)>::iterator i = rects2.begin(); i != rects2.end(); i++, j++)
 	{
-		//cout << "i " << i << endl;
 		rectsprops[0].push_back(i->first.area());
 		rectsprops[1].push_back(i->first.x);
 		rectsprops[2].push_back(i->first.y);
@@ -143,10 +131,10 @@ void myContours(Mat inrangeimage, Mat streamimage, shared_ptr<NetworkTable> netT
 		x -= bounds.x;
 		double y = unionrect.y; 
 		y -= bounds.y;
-		double w = unionrect.width;
-		w -= bounds.width;
-		double h = unionrect.height; 
-		h -= bounds.height;
+		double w = unionrect.br().x;
+		w -= bounds.br().x;
+		double h = unionrect.br().y; 
+		h -= bounds.br().y;
 		double xpos = w + x;
 		if ((w != 0) && (x != 0) && (abs(xpos) < 10))
 			xpos = 0;
@@ -156,6 +144,7 @@ void myContours(Mat inrangeimage, Mat streamimage, shared_ptr<NetworkTable> netT
 			ypos = 0;
 		rectsprops[6].push_back(ypos);
 		rectsprops[7].push_back(i->second.angle);
+//		cout << count << " " << j << " rectsprops" << endl;
 
 		Scalar color;
 		switch (j % 12)
@@ -199,9 +188,8 @@ void myContours(Mat inrangeimage, Mat streamimage, shared_ptr<NetworkTable> netT
 		}
 		//rectangle(streamimage, rotrects[i], color, 2);
 		rectangle(streamimage, i->first, color, 3);
+//		cout << count << " " << j << " rectangle" << endl;
 	}
-
-	//cout << "1" << endl;
 
 	if (rects2.size() > 0)
 	{
@@ -214,9 +202,88 @@ void myContours(Mat inrangeimage, Mat streamimage, shared_ptr<NetworkTable> netT
 		netTable->PutNumber("ypos", rectsprops[6][0]);
 		netTable->PutNumber("angle", rectsprops[7][0]);
 	}
+//	cout << count << " putnumber" << endl;
 
 	rectangle(streamimage, bounds, white, 3);
+//	cout << count << " rectangle 2" << endl;
 
 	// Show in a window
 	imshow("Contours", streamimage);
+	j = 0;
+	for (vector<vector<Point> >::iterator i = contours.begin(); i != contours.end(); i++, j++)
+	{
+			//cout << j << " " << i->size() << endl;
+			i->clear();
+	}
+	contours.clear();
+//	cout << count << " show" << endl;
+//	count++;
+}
+
+
+bool rectCompare(Rect l, Rect r) {
+	//biggest area is closest
+	if (l.width > r.width)
+		return true;
+	if (l.width < r.width)
+		return false;
+	//nearest to the center of the bounds is closest
+	Point2f lcenter = ((l.tl() + l.br())*0.5);
+	Point2f rcenter = ((r.tl() + r.br())*0.5);
+	Point2f ldist = lcenter - center;
+	Point2f rdist = rcenter - center;
+	if (ldist.dot(ldist) < rdist.dot(rdist))
+		return true;
+	if (ldist.dot(ldist) > rdist.dot(rdist))
+		return false;
+	//farther up is closest
+	if (l.y < r.y)
+		return true;
+	if (l.y > r.y)
+		return false;
+	//closer to frame right (robot left) is closest
+	if (l.x > r.x)
+		return true;
+	return false;
+}
+
+
+Mat bmp2mat(LPCWSTR name) {
+
+	Mat src;
+
+	HINSTANCE hInstance = GetModuleHandle(NULL);
+	HDC hDC = CreateCompatibleDC(NULL);
+	// Find the bitmap resource
+	HRSRC hResInfo = FindResource(hInstance, name, RT_BITMAP);
+
+	// Load the bitmap resource
+	HGLOBAL hMemBitmap = LoadResource(hInstance, hResInfo);
+
+	// Lock the resource and access the entire bitmap image
+	PBYTE pBitmapImage = (BYTE*)LockResource(hMemBitmap);
+	if (pBitmapImage == NULL)
+	{
+		FreeResource(hMemBitmap);
+	}
+
+	// Store the width and height of the bitmap
+	BITMAPINFO* pBitmapInfo = (BITMAPINFO*)pBitmapImage;
+	int m_iWidth = (int)pBitmapInfo->bmiHeader.biWidth;
+	int m_iHeight = (int)pBitmapInfo->bmiHeader.biHeight;
+
+	src.create(m_iHeight, m_iWidth, CV_8UC3);
+
+	const PBYTE pTempBits = pBitmapImage + pBitmapInfo->bmiHeader.biSize +
+		pBitmapInfo->bmiHeader.biClrUsed * sizeof(RGBQUAD);
+	CopyMemory(src.data, pTempBits, pBitmapInfo->bmiHeader.biSizeImage);
+
+	Mat dst;
+	flip(src, dst, 0);
+
+	UnlockResource(hMemBitmap);
+	FreeResource(hMemBitmap);
+	DeleteObject(hDC);
+
+	return dst;
 }
