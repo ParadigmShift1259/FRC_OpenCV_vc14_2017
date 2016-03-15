@@ -5,11 +5,11 @@
 #include <iostream>
 #include <Windows.h>
 #include "resource2.h"
+#include <sstream>
 
 using namespace cv;
 using namespace std;
 
-const string videoStreamAddress = "rtsp://FRC:frc@axis-camera.local:554/axis-media/media.amp?videocodec=h264";
 
 const Scalar red = Scalar(0, 0, 255);
 const Scalar orange = Scalar(0, 128, 255);
@@ -25,8 +25,8 @@ const Scalar magenta = Scalar(255, 0, 255);
 const Scalar flushorange = Scalar(128, 0, 255);
 const Scalar white = Scalar(255, 255, 255);
 
-const Rect bounds = Rect(275, 95, 90, 145);
-const Point2f center = (bounds.tl() + bounds.br())*0.5;
+Rect bounds = Rect(275, 95, 90, 145);
+Point2f center;
 
 
 void myContours(Mat src_gray, Mat image, int thresh = 100, int max_thresh = 255);
@@ -40,8 +40,67 @@ Mat bmp2mat(LPCWSTR name);
 
 int main(int argc, char* argv[])
 {
-	
-	VideoCapture videostream;
+	string videoStreamAddress = "rtsp://FRC:frc@axis-camera.local:554/axis-media/media.amp?videocodec=jpeg";
+	//videoStreamAddress = "rtsp://192.168.43.1:5554";
+	if (argc > 1)
+	{
+		int bndcnt = 0;
+		bool stream = false;
+		if (strcmp(argv[1],"/?") == 0)
+		{
+			cerr << "Usage:" << endl;
+			cerr << "   OpenCVTest                         Run with default parameters" << endl;
+			cerr << "   OpenCVTest / ?                     Command help" << endl;
+			cerr << "   OpenCVTest [x[y[w[h]]]] [h264|jpeg]" << endl;
+			cerr << "      x                               x-coordinate of top-left corner of target" << endl;
+			cerr << "      y                               y-coordinate of top-left corner of target" << endl;
+			cerr << "      w                               width of target" << endl;
+			cerr << "      h                               height of target" << endl;
+			cerr << "      h264|jpeg                       stream type" << endl;
+			return 0;
+		}
+		else
+			for (int i = 1; i < argc; i++)
+			{
+				if (!stream && ((strcmp(argv[1], "jpeg") == 0) || (strcmp(argv[1], "h264") == 0)))
+				{
+					videoStreamAddress = "rtsp://FRC:frc@axis-camera.local:554/axis-media/media.amp?videocodec=" + ((string)argv[i]);
+					stream = true;
+					if (bndcnt > 0)
+						break;
+				}
+				if (bndcnt < 4)
+				{
+					istringstream iss(argv[i]);
+					int tin;
+					if (iss >> tin)
+					{
+						switch (bndcnt)
+						{
+						case 0:
+							bounds.x = tin;
+							break;
+						case 1:
+							bounds.y = tin;
+							break;
+						case 2:
+							bounds.width = tin;
+							break;
+						case 3:
+							bounds.height = tin;
+							break;
+						}
+						bndcnt++;
+					}
+					else if (bndcnt > 0)
+					{
+						break;
+					}
+				}
+			}
+	}
+	center = (bounds.tl() + bounds.br())*0.5;
+	VideoCapture videostream = VideoCapture();
 	Mat failimage, streamimage, inrangeimage;
 	failimage = bmp2mat(MAKEINTRESOURCE(IDB_BITMAP1));
 
@@ -49,11 +108,11 @@ int main(int argc, char* argv[])
 	//NetworkTable::SetTeam(1259);
 	//NetworkTable::SetIPAddress("10.12.59.1");
 	NetworkTable::SetIPAddress("roboRIO-1259-FRC.local");
-	//namedWindow("Contours", CV_WINDOW_AUTOSIZE);
-	imshow("Contours", failimage);
-
+	namedWindow("Contours", CV_WINDOW_AUTOSIZE);
+	HWND hwnd = (HWND)cvGetWindowHandle("Contours");
+	int failcnt = 0;
 	//open the video stream and make sure it's opened
-	while (true)
+	while (IsWindowVisible(hwnd))
 	{
 		if (videostream.isOpened()||videostream.open(videoStreamAddress))
 		{
@@ -76,13 +135,22 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				cerr << "Error:  Unable to read frame from stream" << endl;
-				if (waitKey(200) != -1)
-					break;
+				failcnt++;
+				if (failcnt >= 10)
+				{
+					videostream.release();
+				}
+				else
+				{
+					cerr << "Error:  Unable to read frame from stream" << endl;
+					if (waitKey(200) != -1)
+						break;
+				}
 			}
 		}
 		else
 		{
+			imshow("Contours", failimage);
 			cerr << "Error:  Unable to open video stream" << endl;
 			if (waitKey(200) != -1)
 				break;
